@@ -19,28 +19,40 @@ class CasNEIISTAuthBackend extends ExternalStaffAuthenticationBackend {
         return self::$name;
     }
 
+    /* Log debug messages. Uncomment when testing */
+    static function debugErrorLog($error) {
+        //error_log($error);
+    }
+
+    /* Log SQL error and present a message to the user */
+    static function sqlErrorLog($error) {
+        error_log("[sqlErrorLog] " . $error);
+        echo("<h2>Foi detectado um erro interno.</h2>");
+        exit();
+    }
+
     function signOn() {
         if(phpCAS::isAuthenticated()) {
             $username = phpCas::getUser();
-            error_log($username);
             // osTicket >= v1.10
             $staff = StaffSession::lookup($username);
             if (!$staff instanceof StaffSession) {
                 // osTicket <= v1.9.7 or so
                 $staff = new StaffSession($username);
             }
+            self::debugErrorLog("[signOn] " . print_r($staff, true));
             if ($staff && $staff->getId()) {
                 $db = neiist_db_connect("osticket-user", "neiist_people");
-                if($db === -1 || $db === -2) die("Bad NEIIST DB user configuration");
+                if($db === -1 || $db === -2) self::sqlErrorLog("Bad NEIIST DB user configuration");
                 $sql = "SELECT person_oid FROM RegularAssociate WHERE ist_id LIKE '" . $username . "'";
                 $result = $db->query($sql);
-                if($result === FALSE) die($db->error);
+                if($result === FALSE) self::sqlErrorLog($db->error);
                 if($result->num_rows > 0) {
                     $row = $result->fetch_assoc();
                     $oid = $row['person_oid'];
                     $sql = "SELECT email FROM Entity WHERE oid = '" . $oid . "'";
                     $result = $db->query($sql);
-                    if($result === FALSE) die($db->error);
+                    if($result === FALSE) self::sqlErrorLog($db->error);
                     $row = $result->fetch_assoc();
                     $email = $row['email'];
 
@@ -70,12 +82,15 @@ class CasNEIISTAuthBackend extends ExternalStaffAuthenticationBackend {
                     }
                     return $staff;
                 } else {
+                    self::debugErrorLog("[signOn] " . "1");
                     $_SESSION['_staff']['auth']['msg'] = 'Error getting user "' . $username . '" from database';
                 }
             } else {
+                self::debugErrorLog("[signOn] " . "2");
                 $_SESSION['_staff']['auth']['msg'] = 'Have your administrator create a local account';
             }
         } else {
+            self::debugErrorLog("[signOn] " . "r");
             Http::redirect(ROOT_PATH . 'scp/login.php?do=ext&bk=cas');
         }
     }
